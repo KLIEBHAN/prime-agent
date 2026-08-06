@@ -135,6 +135,16 @@ export class PendingMessageNavigation {
 		return draft;
 	}
 
+	recallFirst(queue: AgentConnectionQueueState, draft: string): string | undefined {
+		const first = items(queue)[0];
+		if (!first) return undefined;
+		this.queue = clone(queue);
+		this.cursor = 0;
+		this.draft = draft;
+		this.edits.clear();
+		return first.text;
+	}
+
 	browse(queue: AgentConnectionQueueState, text: string, delta: -1 | 1): string | undefined {
 		if (!this.queue || !equal(this.queue, queue)) {
 			if (delta > 0 || items(queue).length === 0) return undefined;
