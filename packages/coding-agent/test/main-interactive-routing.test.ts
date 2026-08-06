@@ -70,6 +70,7 @@ describe("interactive startup routing", () => {
 		["startup benchmark", { appMode: "interactive", startupBenchmark: true }],
 		["help", { appMode: "interactive", startupBenchmark: false, help: true }],
 		["model listing", { appMode: "interactive", startupBenchmark: false, listModels: true }],
+		["--no-daemon", { appMode: "interactive", startupBenchmark: false, noDaemon: true }],
 	] satisfies Array<[string, InteractiveDaemonStartupDecision]>)(
 		"keeps %s out of daemon client routing",
 		(_label, decision) => {
@@ -103,12 +104,13 @@ describe("interactive startup routing", () => {
 	});
 
 	type InteractiveFallbackOverrides = Partial<
-		Pick<InteractiveDaemonStartupDecision, "startupBenchmark" | "noSession" | "listModels">
+		Pick<InteractiveDaemonStartupDecision, "startupBenchmark" | "noSession" | "noDaemon" | "listModels">
 	>;
 
 	const fallbackCases: Array<[string, InteractiveFallbackOverrides]> = [
 		["startup benchmark", { startupBenchmark: true }],
 		["--no-session", { noSession: true }],
+		["--no-daemon", { noDaemon: true }],
 		["--list-models", { listModels: true }],
 		["--list-models search", { listModels: "claude" }],
 	];

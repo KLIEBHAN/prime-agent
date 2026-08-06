@@ -18,6 +18,26 @@ import {
 	isDaemonDialogExtensionUiRequest,
 } from "./daemon-protocol.js";
 
+/**
+ * Thrown by daemon-mode terminal-owned UI APIs such as setEditorComponent and
+ * addAutocompleteProvider. Those APIs need a live TUI in the same process; the
+ * daemon worker has no terminal of its own. Daemon-backed interactive clients
+ * load UI-owning extensions in the terminal process instead.
+ */
+export class ExtensionTerminalUiUnsupportedError extends Error {
+	readonly code = "extension_terminal_ui_unsupported" as const;
+
+	constructor(method: "setEditorComponent" | "addAutocompleteProvider") {
+		super(
+			`ctx.ui.${method}() is not supported when the extension runs under the daemon/worker architecture: ` +
+				"editor components and autocomplete providers are live TUI objects that cannot cross the process " +
+				"boundary. In daemon-backed interactive sessions these APIs are available from the terminal client " +
+				'extension binding (mode "tui"). Use --no-daemon for a fully in-process interactive session.',
+		);
+		this.name = "ExtensionTerminalUiUnsupportedError";
+	}
+}
+
 export interface ActiveSessionBindingCallbacks {
 	broadcast: (state: ActiveSessionState, message: DaemonOutbound) => void;
 	createConnectionState?: (state: ActiveSessionState) => AgentConnectionState;
@@ -82,6 +102,8 @@ export async function bindActiveSessionState(
 
 	await session.bindExtensions({
 		uiContext: createExtensionUIContext(state, callbacks.broadcast),
+		// Protocol-backed UI is available, but terminal-owned objects are not.
+		mode: "rpc",
 		commandContextActions: createCommandContextActions(state),
 		shutdownHandler: callbacks.shutdown,
 		onError: (error) => {
@@ -232,8 +254,12 @@ function createExtensionUIContext(
 						: undefined,
 			);
 		},
-		addAutocompleteProvider: () => {},
-		setEditorComponent: () => {},
+		addAutocompleteProvider: () => {
+			throw new ExtensionTerminalUiUnsupportedError("addAutocompleteProvider");
+		},
+		setEditorComponent: () => {
+			throw new ExtensionTerminalUiUnsupportedError("setEditorComponent");
+		},
 		getEditorComponent: () => undefined,
 		get theme(): Theme {
 			return theme;

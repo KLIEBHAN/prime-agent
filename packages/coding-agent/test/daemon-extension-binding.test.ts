@@ -16,7 +16,10 @@ import { SessionManager } from "../src/core/session-manager.js";
 import type { ExtensionAPI, ExtensionFactory } from "../src/index.js";
 import { createAgentConnectionState } from "../src/modes/agent-connection/snapshot.js";
 import type { ActiveSessionState } from "../src/modes/daemon/active-session-state.js";
-import { bindActiveSessionState } from "../src/modes/daemon/daemon-extension-binding.js";
+import {
+	bindActiveSessionState,
+	ExtensionTerminalUiUnsupportedError,
+} from "../src/modes/daemon/daemon-extension-binding.js";
 import type { DaemonOutbound } from "../src/modes/daemon/daemon-protocol.js";
 
 function getText(message: AgentSession["messages"][number]): string {
@@ -146,6 +149,56 @@ describe("daemon extension binding", () => {
 				"partial",
 			);
 		}
+	});
+
+	it("rejects terminal-owned UI APIs instead of silently no-oping", async () => {
+		let setEditorError: unknown;
+		let addAutocompleteError: unknown;
+		let observedMode: string | undefined;
+		const runtime = await createRuntimeForTest(
+			(pi) => {
+				pi.registerCommand("daemon-terminal-ui", {
+					description: "daemon terminal ui",
+					handler: async (_args, ctx) => {
+						observedMode = ctx.mode;
+						try {
+							ctx.ui.setEditorComponent(() => {
+								throw new Error("factory should not run");
+							});
+						} catch (error) {
+							setEditorError = error;
+						}
+						try {
+							ctx.ui.addAutocompleteProvider((current) => current);
+						} catch (error) {
+							addAutocompleteError = error;
+						}
+					},
+				});
+			},
+			["daemon terminal ui reply"],
+		);
+
+		const state: ActiveSessionState = {
+			activeSessionId: "active-terminal-ui",
+			runtime,
+			clients: new Set(),
+			pendingAttaches: 0,
+			extensionUiRequests: new Map(),
+			eventGeneration: "generation-terminal-ui",
+			lastEventSequence: 0,
+		};
+		await bindActiveSessionState(state, {
+			broadcast: () => {},
+			shutdown: () => {},
+		});
+
+		await runtime.session.prompt("/daemon-terminal-ui");
+
+		expect(observedMode).toBe("rpc");
+		expect(setEditorError).toBeInstanceOf(ExtensionTerminalUiUnsupportedError);
+		expect(addAutocompleteError).toBeInstanceOf(ExtensionTerminalUiUnsupportedError);
+		expect((setEditorError as Error).message).toContain("setEditorComponent");
 	});
 
 	it("keeps extension replacement callbacks daemon-side and rebinds before withSession", async () => {

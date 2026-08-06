@@ -190,6 +190,7 @@ const TOP_LEVEL_OPTION_GROUPS: ReadonlyArray<{ heading: string; options: readonl
 			["--fork <path|id>", "Fork a saved session into a new session"],
 			["--session-dir <dir>", "Use a custom session directory"],
 			["--no-session", "Do not save the session"],
+			["--no-daemon", "Run interactive mode in-process without the daemon client"],
 			["--goal <objective>", "Seed a persistent goal for a new root session"],
 			["--goal-token-budget <n>", "Set a positive token budget for --goal"],
 		],

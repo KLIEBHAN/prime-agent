@@ -22,6 +22,8 @@ export interface Args {
 	mode?: Mode;
 	daemonSocket?: string;
 	noSession?: boolean;
+	/** Force in-process interactive mode instead of the daemon client. */
+	noDaemon?: boolean;
 	fork?: string;
 	sessionDir?: string;
 	models?: string[];
@@ -143,6 +145,8 @@ export function parseArgs(args: string[]): Args {
 			result.appendSystemPrompt.push(args[++i]);
 		} else if (arg === "--no-session") {
 			result.noSession = true;
+		} else if (arg === "--no-daemon") {
+			result.noDaemon = true;
 		} else if (arg === "--fork" && i + 1 < args.length) {
 			result.fork = args[++i];
 		} else if (arg === "--session-dir" && i + 1 < args.length) {

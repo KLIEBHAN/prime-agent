@@ -441,6 +441,20 @@ describe("ExtensionRunner", () => {
 			controller.abort();
 			expect(ctx.signal?.aborted).toBe(true);
 		});
+
+		it("exposes ExtensionContext.mode from setUIContext", async () => {
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			runner.bindCore(extensionActions, extensionContextActions);
+
+			expect(runner.createContext().mode).toBe("print");
+
+			runner.setUIContext(runner.getUIContext(), "tui");
+			expect(runner.createContext().mode).toBe("tui");
+
+			runner.setUIContext(runner.getUIContext(), "rpc");
+			expect(runner.createContext().mode).toBe("rpc");
+		});
 	});
 
 	describe("error handling", () => {

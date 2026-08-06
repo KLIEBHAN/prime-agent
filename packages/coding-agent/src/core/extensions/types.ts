@@ -207,12 +207,26 @@ export interface ExtensionUIContext {
 	/** Show a multi-line editor for text editing. */
 	editor(title: string, prefill?: string): Promise<string | undefined>;
 
-	/** Stack additional autocomplete behavior on top of the built-in provider. */
+	/**
+	 * Stack additional autocomplete behavior on top of the built-in provider.
+	 *
+	 * Not supported when the extension runs under the daemon/worker architecture:
+	 * autocomplete providers are live TUI objects and cannot cross the process
+	 * boundary. Calling this throws `ExtensionTerminalUiUnsupportedError`.
+	 * In daemon-backed interactive sessions, UI-owning extensions are also loaded
+	 * in the terminal client where this API works.
+	 */
 	addAutocompleteProvider(factory: AutocompleteProviderFactory): void;
 
 	/**
 	 * Set a custom editor component via factory function.
 	 * Pass undefined to restore the default editor.
+	 *
+	 * Not supported when the extension runs under the daemon/worker architecture:
+	 * editor components are live TUI objects and cannot cross the process
+	 * boundary. Calling this throws `ExtensionTerminalUiUnsupportedError`.
+	 * In daemon-backed interactive sessions, UI-owning extensions are also loaded
+	 * in the terminal client where this API works.
 	 *
 	 * The factory receives:
 	 * - `theme`: EditorTheme for styling borders and autocomplete
@@ -285,13 +299,18 @@ export interface CompactOptions {
 	onError?: (error: Error) => void;
 }
 
+/** Current run mode. Use "tui" to guard terminal-only UI such as custom components. */
+export type ExtensionMode = "tui" | "rpc" | "json" | "print";
+
 /**
  * Context passed to extension event handlers.
  */
 export interface ExtensionContext {
 	/** UI methods for user interaction */
 	ui: ExtensionUIContext;
-	/** Whether UI is available (false in print/RPC mode) */
+	/** Current run mode. Use "tui" to guard terminal-only UI such as custom components. */
+	mode: ExtensionMode;
+	/** Whether dialog-capable UI is available (true in TUI and RPC modes) */
 	hasUI: boolean;
 	/** Current working directory */
 	cwd: string;

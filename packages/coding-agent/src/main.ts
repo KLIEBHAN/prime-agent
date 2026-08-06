@@ -84,6 +84,7 @@ import {
 	type AgentConnection,
 	type AgentsViewScopeKey,
 	ClientPromptStashStore,
+	createClientUiExtensionRunner,
 	createInteractiveModeLocalSessionHost,
 	createInteractiveModeUiServicesFromServices,
 	DaemonAgentConnection,
@@ -203,6 +204,7 @@ export interface DaemonClientStartupDecision {
 	appMode: AppMode;
 	startupBenchmark: boolean;
 	noSession?: boolean;
+	noDaemon?: boolean;
 	help?: boolean;
 	listModels?: string | true;
 }
@@ -215,13 +217,18 @@ export function shouldUseDaemonInteractive(options: DaemonClientStartupDecision)
 		options.appMode === "interactive" &&
 		!options.startupBenchmark &&
 		!options.noSession &&
+		!options.noDaemon &&
 		options.listModels === undefined
 	);
 }
 
 export function shouldUseDaemonClient(options: DaemonClientStartupDecision): boolean {
 	return (
-		options.appMode !== "daemon" && !options.startupBenchmark && !options.help && options.listModels === undefined
+		options.appMode !== "daemon" &&
+		!options.startupBenchmark &&
+		!options.help &&
+		!options.noDaemon &&
+		options.listModels === undefined
 	);
 }
 
@@ -1141,6 +1148,7 @@ export async function main(args: string[], options?: MainOptions) {
 		appMode,
 		startupBenchmark,
 		noSession: parsed.noSession,
+		noDaemon: parsed.noDaemon,
 		listModels: parsed.listModels,
 		ownedSessionWorker: isOwnedSessionWorkerProcess(),
 		hasProcessLocalExtensionFactories,
@@ -1443,6 +1451,10 @@ export async function main(args: string[], options?: MainOptions) {
 			? startupModel.modelFallbackMessage
 			: resolveAttachModelFallbackMessage(summary, startupModel.modelFallbackMessage);
 
+		const clientUiExtensions = createClientUiExtensionRunner({
+			services,
+			sessionManager,
+		});
 		const interactiveMode = new InteractiveMode({
 			agentConnection,
 			daemonSocketPath,
@@ -1450,6 +1462,7 @@ export async function main(args: string[], options?: MainOptions) {
 			promptStashStore,
 			promptStashSessionId: summary.sessionId,
 			bindLocalSessionExtensions: false,
+			clientUiExtensions,
 			migratedProviders,
 			modelFallbackMessage: attachModelFallbackMessage,
 			initialMessage,

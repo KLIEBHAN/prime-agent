@@ -49,7 +49,9 @@ function describeAutonomousLimit(status: AgentAutonomousStatus, reason: Autonomo
  */
 export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: PrintModeOptions): Promise<number> {
 	const connection = new InProcessAgentConnection(runtimeHost);
-	return runPrintModeWithConnectionInternal(connection, options, () => connection.bindHeadlessExtensions());
+	return runPrintModeWithConnectionInternal(connection, options, () =>
+		connection.bindHeadlessExtensions({ mode: options.mode === "json" ? "json" : "print" }),
+	);
 }
 
 export async function runPrintModeWithConnection(

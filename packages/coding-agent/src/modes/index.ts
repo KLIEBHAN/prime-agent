@@ -67,6 +67,7 @@ export {
 	DaemonClient,
 	type DaemonClientMessageListener,
 } from "./daemon/daemon-client.js";
+export { ExtensionTerminalUiUnsupportedError } from "./daemon/daemon-extension-binding.js";
 export { type DaemonModeOptions, runDaemonMode } from "./daemon/daemon-mode.js";
 export type {
 	DaemonArtifactReference,
@@ -99,6 +100,10 @@ export type { SessionActivity, SessionLifecycle, SessionSummary } from "./daemon
 export { resolveAttachModelFallbackMessage } from "./daemon/daemon-session-list.js";
 export { defaultDaemonSocketPath } from "./daemon/daemon-socket.js";
 export { runDaemonSupervisorMode } from "./daemon/daemon-supervisor.js";
+export {
+	type ClientUiExtensionRunner,
+	createClientUiExtensionRunner,
+} from "./interactive/client-ui-extensions.js";
 export {
 	type InteractiveInitialPrompt,
 	InteractiveMode,

@@ -166,6 +166,7 @@ import {
 } from "../shared/startup-notices.js";
 import { AGENT_ACTIVITY_LABELS, AgentActivityTracker, formatTokenCount } from "./agent-activity.js";
 import { type AuthenticationResult, getAnthropicSubscriptionAuthWarning, ProviderAuthFlows } from "./auth-flows.js";
+import type { ClientUiExtensionRunner } from "./client-ui-extensions.js";
 import { AgentMessageComponent } from "./components/agent-message.js";
 import { ArminComponent } from "./components/armin.js";
 import { AssistantMessageComponent } from "./components/assistant-message.js";
@@ -768,6 +769,12 @@ export interface InteractiveModeOptions {
 	localSessionHost?: InteractiveModeLocalSessionHost;
 	/** Bind extension handlers in the local session host. Disabled for daemon/gateway-backed clients. */
 	bindLocalSessionExtensions?: boolean;
+	/**
+	 * Terminal-process extension runner for daemon-backed interactive sessions.
+	 * Binds real TUI UI (custom editors / autocomplete) and executes UI-owning
+	 * extension commands locally. Independent from bindLocalSessionExtensions.
+	 */
+	clientUiExtensions?: ClientUiExtensionRunner;
 	/** UI-local services used for settings, auth, resources, and rendering. Defaults to services from localSessionHost. */
 	uiServices?: InteractiveModeUiServices;
 	/** Extra cleanup for externally-owned UI service hosts. Runs after the connection is disposed and before process exit. */
@@ -810,6 +817,7 @@ export class InteractiveMode {
 	private agentConnection: AgentConnection;
 	private localSessionHost: InteractiveModeLocalSessionHost | undefined;
 	private bindLocalSessionExtensions: boolean;
+	private clientUiExtensions: ClientUiExtensionRunner | undefined;
 	private ui: TUI;
 	private chatContainer: Container;
 	private shortcutGuideContainer: Container;
@@ -1045,6 +1053,7 @@ export class InteractiveMode {
 		this.hydratePromptStash();
 		this.localSessionHost = options.localSessionHost;
 		this.bindLocalSessionExtensions = options.bindLocalSessionExtensions ?? options.localSessionHost !== undefined;
+		this.clientUiExtensions = options.clientUiExtensions;
 		if (this.bindLocalSessionExtensions && !options.localSessionHost) {
 			throw new Error("Local extension binding requires localSessionHost");
 		}
@@ -2379,6 +2388,122 @@ export class InteractiveMode {
 	}
 
 	/**
+	 * Bind UI-owning extensions in the terminal process for daemon-backed chats.
+	 */
+	private async bindClientUiExtensions(): Promise<void> {
+		if (!this.clientUiExtensions) {
+			return;
+		}
+		const runner = this.clientUiExtensions.runner;
+		runner.bindCore(
+			{
+				sendMessage: () => {},
+				sendUserMessage: () => {},
+				appendEntry: () => {},
+				setSessionName: () => {},
+				getSessionName: () => undefined,
+				setLabel: () => {},
+				getActiveTools: () => [],
+				getAllTools: () => [],
+				setActiveTools: () => {},
+				refreshTools: () => {},
+				getCommands: () => [],
+				setModel: async () => false,
+				getThinkingLevel: () => this.connectionState?.thinkingLevel ?? "off",
+				setThinkingLevel: () => {},
+			},
+			{
+				getModel: () => this.getCurrentModel(),
+				isIdle: () => !this.isAgentStreaming(),
+				getSignal: () => undefined,
+				abort: () => {
+					void this.agentConnection.abort();
+				},
+				hasPendingMessages: () => this.getQueuedActionCount() > 0,
+				shutdown: () => {
+					this.shutdownRequested = true;
+				},
+				getContextUsage: () => this.getConnectionContextUsage(),
+				compact: (options) => {
+					void (async () => {
+						try {
+							const result = await this.agentConnection.compact(options?.customInstructions);
+							options?.onComplete?.(result);
+						} catch (error) {
+							const err = error instanceof Error ? error : new Error(String(error));
+							options?.onError?.(err);
+						}
+					})();
+				},
+				getSystemPrompt: () => "",
+			},
+		);
+		runner.bindCommandContext({
+			waitForIdle: () => this.agentConnection.waitForIdle(),
+			newSession: async (options) => {
+				const result = await this.agentConnection.newSession(
+					options?.parentSession ? { parentSession: options.parentSession } : undefined,
+				);
+				if (!result.cancelled) {
+					await this.renderCurrentSessionState();
+					this.ui.requestRender();
+				}
+				return result;
+			},
+			fork: async (entryId, options) => {
+				const result = await this.agentConnection.fork(entryId, { position: options?.position });
+				if (!result.cancelled) {
+					await this.renderCurrentSessionState();
+					this.editor.setText("selectedText" in result ? (result.selectedText ?? "") : "");
+					this.showStatus("Forked to new session");
+				}
+				return { cancelled: result.cancelled };
+			},
+			navigateTree: async (targetId, options) => {
+				const result = await this.agentConnection.navigateTree(targetId, {
+					summarize: options?.summarize,
+					customInstructions: options?.customInstructions,
+					replaceInstructions: options?.replaceInstructions,
+					label: options?.label,
+				});
+				if (result.cancelled) {
+					return { cancelled: true };
+				}
+				await this.renderTreeNavigation(result);
+				return { cancelled: false };
+			},
+			switchSession: async (sessionPath, options) => this.handleResumeSession(sessionPath, options),
+			reload: async () => {
+				await this.handleReloadCommand();
+			},
+		});
+		runner.onError((error) => {
+			this.showExtensionError(error.extensionPath, error.error, error.stack);
+		});
+		await this.clientUiExtensions.bind(this.createExtensionUIContext());
+		this.setupExtensionShortcuts(runner);
+	}
+
+	private async executeClientUiExtensionCommand(commandName: string, args: string): Promise<void> {
+		const runner = this.clientUiExtensions?.runner;
+		const command = runner?.getCommand(commandName);
+		if (!runner || !command) {
+			return;
+		}
+		try {
+			await command.handler(args, runner.createCommandContext());
+		} catch (error) {
+			const commandError = error instanceof Error ? error : new Error(String(error));
+			runner.emitError({
+				extensionPath: `command:${commandName}`,
+				event: "command",
+				error: commandError.message,
+			});
+			this.showError(commandError.message);
+		}
+	}
+
+	/**
 	 * Initialize the extension system with TUI-based UI context.
 	 */
 	private async bindCurrentSessionExtensions(): Promise<void> {
@@ -2386,6 +2511,7 @@ export class InteractiveMode {
 		const uiContext = this.createExtensionUIContext();
 		await localSessionHost.bindExtensions({
 			uiContext,
+			mode: "tui",
 			commandContextActions: {
 				waitForIdle: () => this.agentConnection.waitForIdle(),
 				newSession: async (options) => {
@@ -2756,6 +2882,9 @@ export class InteractiveMode {
 		} else {
 			setRegisteredThemes(this.uiServices.getThemes());
 			await this.refreshConnectionCatalog();
+			if (this.clientUiExtensions) {
+				await this.bindClientUiExtensions();
+			}
 			this.setupAutocompleteProvider();
 			this.showLoadedResources({ force: false, showDiagnosticsWhenQuiet: true });
 		}
@@ -3028,36 +3157,44 @@ export class InteractiveMode {
 		const shortcuts = extensionRunner.getShortcuts(this.keybindings.getEffectiveConfig());
 		if (shortcuts.size === 0) return;
 
-		// Create a context for shortcut handlers
-		const localSessionHost = this.getLocalSessionHost();
-		const createContext = (): ExtensionContext => ({
-			ui: this.createExtensionUIContext(),
-			hasUI: true,
-			cwd: this.getCurrentCwd(),
-			sessionManager: localSessionHost.getSessionManager(),
-			modelRegistry: this.modelRegistry,
-			model: this.getCurrentModel(),
-			isIdle: () => !this.isAgentStreaming(),
-			signal: localSessionHost.getAbortSignal(),
-			abort: () => this.agentConnection.abort(),
-			hasPendingMessages: () => this.getQueuedActionCount() > 0,
-			shutdown: () => {
-				this.shutdownRequested = true;
-			},
-			getContextUsage: () => this.getConnectionContextUsage(),
-			compact: (options) => {
-				void (async () => {
-					try {
-						const result = await this.agentConnection.compact(options?.customInstructions);
-						options?.onComplete?.(result);
-					} catch (error) {
-						const err = error instanceof Error ? error : new Error(String(error));
-						options?.onError?.(err);
-					}
-				})();
-			},
-			getSystemPrompt: () => localSessionHost.getSystemPrompt(),
-		});
+		// Create a context for shortcut handlers. Prefer the in-process local host when
+		// present; otherwise use the client UI runner's own createContext() so daemon
+		// interactive sessions can still install extension shortcuts.
+		const createContext = (): ExtensionContext => {
+			if (this.localSessionHost) {
+				const localSessionHost = this.localSessionHost;
+				return {
+					ui: this.createExtensionUIContext(),
+					mode: "tui",
+					hasUI: true,
+					cwd: this.getCurrentCwd(),
+					sessionManager: localSessionHost.getSessionManager(),
+					modelRegistry: this.modelRegistry,
+					model: this.getCurrentModel(),
+					isIdle: () => !this.isAgentStreaming(),
+					signal: localSessionHost.getAbortSignal(),
+					abort: () => this.agentConnection.abort(),
+					hasPendingMessages: () => this.getQueuedActionCount() > 0,
+					shutdown: () => {
+						this.shutdownRequested = true;
+					},
+					getContextUsage: () => this.getConnectionContextUsage(),
+					compact: (options) => {
+						void (async () => {
+							try {
+								const result = await this.agentConnection.compact(options?.customInstructions);
+								options?.onComplete?.(result);
+							} catch (error) {
+								const err = error instanceof Error ? error : new Error(String(error));
+								options?.onError?.(err);
+							}
+						})();
+					},
+					getSystemPrompt: () => localSessionHost.getSystemPrompt(),
+				};
+			}
+			return extensionRunner.createContext();
+		};
 
 		// Set up the extension shortcut handler on the default editor
 		this.defaultEditor.onExtensionShortcut = (data: string) => {
@@ -4584,6 +4721,19 @@ export class InteractiveMode {
 						status: "complete",
 					});
 					this.ui.requestRender();
+					return;
+				}
+
+				// UI-owning extension commands run in the terminal process for daemon-backed
+				// interactive sessions so setEditorComponent / addAutocompleteProvider work.
+				if (
+					slashCommand &&
+					!isBuiltinSlashCommandName(slashCommand.name) &&
+					this.clientUiExtensions?.runner.getCommand(slashCommand.name)
+				) {
+					this.editor.addToHistory?.(text);
+					this.editor.setText("");
+					await this.executeClientUiExtensionCommand(slashCommand.name, slashCommand.args);
 					return;
 				}
 

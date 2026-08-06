@@ -857,6 +857,12 @@ All handlers receive `ctx: ExtensionContext`.
 
 UI methods for user interaction. See [Custom UI](#custom-ui) for full details.
 
+### ctx.mode
+
+Current run mode: `"tui"` | `"rpc"` | `"json"` | `"print"`.
+
+Use `ctx.mode === "tui"` to guard terminal-only UI such as custom editors, autocomplete providers, headers, and footers. In daemon-backed interactive sessions, extensions also run in the terminal client with `mode: "tui"` for those APIs; the daemon worker itself exposes `mode: "rpc"` because it only has protocol UI.
+
 ### ctx.hasUI
 
 `false` in print mode (`-p`) and JSON mode. `true` in interactive and RPC mode. In RPC mode, dialog methods (`select`, `confirm`, `input`, `editor`) work via the extension UI sub-protocol, and fire-and-forget methods (`notify`, `setStatus`, `setWidget`, `setTitle`, `setEditorText`) emit requests to the client. Some TUI-specific methods are no-ops or return defaults (see [rpc.md](rpc.md#extension-ui-protocol)).
@@ -2500,12 +2506,14 @@ const highlighted = highlightCode(code, lang, theme);
 
 | Mode | UI Methods | Notes |
 |------|-----------|-------|
-| Interactive | Full TUI | Normal operation |
-| RPC (`--mode rpc`) | JSON protocol | Host handles UI, see [rpc.md](rpc.md) |
-| JSON (`--mode json`) | No-op | Event stream to stdout, see [json.md](json.md) |
-| Print (`-p`) | No-op | Extensions run but can't prompt |
+| Interactive | Full TUI | Normal operation. Default startup uses a daemon client; UI-owning extensions (custom editors, autocomplete providers) are also bound in the terminal process with `ctx.mode === "tui"`. Use `--no-daemon` for a fully in-process interactive session. |
+| RPC (`--mode rpc`) | JSON protocol | Host handles UI, see [rpc.md](rpc.md). `ctx.mode === "rpc"`. |
+| JSON (`--mode json`) | No-op | Event stream to stdout, see [json.md](json.md). `ctx.mode === "json"`. |
+| Print (`-p`) | No-op | Extensions run but can't prompt. `ctx.mode === "print"`. |
 
-In non-interactive modes, check `ctx.hasUI` before using UI methods.
+In non-interactive modes, check `ctx.hasUI` before using UI methods. For terminal-only features, also check `ctx.mode === "tui"`.
+
+Custom editors (`setEditorComponent`) and autocomplete providers (`addAutocompleteProvider`) require a live TUI in the same process. On the daemon worker they throw `ExtensionTerminalUiUnsupportedError` instead of silently no-oping; the interactive terminal client binds those APIs for the same extensions.
 
 ## Examples Reference
 

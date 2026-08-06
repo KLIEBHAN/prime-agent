@@ -13,7 +13,7 @@ import type {
 	AgentHeartbeatManagementAction,
 	AgentHeartbeatUpdateAction,
 } from "../../core/cron-jobs.js";
-import type { ExtensionUIContext } from "../../core/extensions/types.js";
+import type { ExtensionMode, ExtensionUIContext } from "../../core/extensions/types.js";
 import type { RefinementResult } from "../../core/refinement/index.js";
 import { type DeleteSessionFileResult, deleteSessionFile } from "../../core/session-file-actions.js";
 import { SessionManager } from "../../core/session-manager.js";
@@ -65,6 +65,7 @@ import type {
 
 export interface InProcessHeadlessExtensionOptions {
 	uiContext?: ExtensionUIContext;
+	mode?: ExtensionMode;
 	shutdownHandler?: () => void;
 }
 
@@ -599,6 +600,7 @@ export class InProcessAgentConnection implements AgentConnection {
 		const session = this.session;
 		await session.bindExtensions({
 			uiContext: this.headlessExtensionOptions?.uiContext,
+			mode: this.headlessExtensionOptions?.mode ?? (this.headlessExtensionOptions?.uiContext ? "rpc" : "print"),
 			commandContextActions: {
 				waitForIdle: () => session.waitForIdle(),
 				newSession: (options) => this.runtimeHost.newSession(options),

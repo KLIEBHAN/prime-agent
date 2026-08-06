@@ -41,7 +41,7 @@ interface RpcModeConnectionOptions {
 export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<never> {
 	const connection = new InProcessAgentConnection(runtimeHost);
 	return runRpcModeWithConnectionInternal(connection, {
-		bindHeadlessExtensions: (options) => connection.bindHeadlessExtensions(options),
+		bindHeadlessExtensions: (options) => connection.bindHeadlessExtensions({ ...options, mode: "rpc" }),
 	});
 }
 
