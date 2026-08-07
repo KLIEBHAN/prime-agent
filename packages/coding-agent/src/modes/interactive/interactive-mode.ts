@@ -1369,6 +1369,10 @@ export class InteractiveMode {
 						keyHint("tui.editor.deleteToLineEnd", "to delete to end"),
 						rawKeyHint("/effort", "to set thinking level"),
 						hint("app.model.select", "to select model"),
+						rawKeyHint(
+							`${keyText("app.model.cycleForward")}/${keyText("app.model.cycleBackward")}`,
+							"to cycle models",
+						),
 						hint("app.tools.expand", "to expand tools"),
 						hint("app.thinking.toggle", "to expand thinking"),
 						hint("app.subagents.focus", "to inspect subagents"),
@@ -2901,6 +2905,10 @@ export class InteractiveMode {
 		return this.connectionState?.scopedModels ?? [];
 	}
 
+	private hasScopedModelState(): boolean {
+		return this.getScopedModelState().length > 0;
+	}
+
 	private async rebindCurrentSession(): Promise<void> {
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
@@ -4274,6 +4282,12 @@ export class InteractiveMode {
 			void this.handleDebugCommand();
 		};
 		this.defaultEditor.onAction("app.model.select", () => this.showModelSelector());
+		this.defaultEditor.onAction("app.model.cycleForward", () => {
+			void this.cycleModel("forward");
+		});
+		this.defaultEditor.onAction("app.model.cycleBackward", () => {
+			void this.cycleModel("backward");
+		});
 		this.defaultEditor.onAction("app.tools.expand", () => this.toggleToolOutputExpansion());
 		this.defaultEditor.onAction("app.thinking.toggle", () => this.toggleThinkingBlockVisibility());
 		this.defaultEditor.onAction("app.subagents.focus", () => this.focusSubagentSummary());
@@ -7611,6 +7625,46 @@ export class InteractiveMode {
 		this.setupAutocompleteProvider();
 	}
 
+	private async cycleModel(direction: "forward" | "backward"): Promise<void> {
+		const connection = this.agentConnection;
+		const sessionId = this.connectionState?.sessionId;
+		try {
+			const result = await connection.cycleModel(direction);
+			if (this.agentConnection !== connection || this.connectionState?.sessionId !== sessionId) return;
+			if (!result) {
+				this.showStatus(this.hasScopedModelState() ? "Only one model in scope" : "Only one model available");
+				return;
+			}
+			const state = await connection.getState();
+			if (
+				this.agentConnection !== connection ||
+				this.connectionState?.sessionId !== sessionId ||
+				(sessionId !== undefined && state.sessionId !== sessionId)
+			) {
+				return;
+			}
+			this.settingsManager.setDefaultModelAndProvider(result.model.provider, result.model.id);
+			this.patchConnectionState({
+				model: state.model ?? result.model,
+				thinkingLevel: result.thinkingLevel,
+				serviceTier: result.serviceTier,
+				availableThinkingLevels: state.availableThinkingLevels,
+			});
+			this.footer.invalidate();
+			this.subagentSummaryLine.invalidate();
+			this.updateEditorBorderColor();
+			// Rebuild so the /effort argument hint reflects the new model's levels.
+			this.setupAutocompleteProvider();
+			const thinking =
+				result.model.reasoning && result.thinkingLevel !== "off" ? ` (thinking: ${result.thinkingLevel})` : "";
+			this.showStatus(`Model: ${result.model.name || result.model.id}${thinking}`);
+			void this.maybeWarnAboutAnthropicSubscriptionAuth(result.model);
+			this.checkDaxnutsEasterEgg(result.model);
+		} catch (error) {
+			this.showError(error instanceof Error ? error.message : String(error));
+		}
+	}
+
 	private async completeModelSelection(model: AgentConnectionModel): Promise<void> {
 		this.showStatus(`Switching model: ${model.id}`);
 		await this.applySelectedModel(model);
@@ -9588,6 +9642,7 @@ export class InteractiveMode {
 		const clearInput = this.getAppKeyDisplay("app.input.clear");
 		const shortcutsKey = this.getAppKeyDisplay("app.shortcuts");
 		const selectModel = this.getAppKeyDisplay("app.model.select");
+		const cycleModelForward = this.getAppKeyDisplay("app.model.cycleForward");
 		const expandTools = this.getAppKeyDisplay("app.tools.expand");
 		const toggleThinking = this.getAppKeyDisplay("app.thinking.toggle");
 		const externalEditor = this.getAppKeyDisplay("app.editor.external");
@@ -9601,7 +9656,7 @@ export class InteractiveMode {
 \`${clearInput}\` interrupt · press twice to rewind or clear the prompt
 
 **Controls**
-\`${selectModel}\` select model · \`/effort\` set reasoning · \`${expandTools}\` tool output
+\`${selectModel}\` select model · \`${cycleModelForward}\` cycle models · \`/effort\` set reasoning · \`${expandTools}\` tool output
 \`${toggleThinking}\` thinking blocks · \`${promptStash}\` stash prompt · \`${externalEditor}\` edit in \`$EDITOR\`
 \`${pasteImage}\` paste image
 
@@ -9639,6 +9694,8 @@ ${shortcutsKey ? `\`${shortcutsKey}\` quick shortcuts · ` : ""}\`/hotkeys\` ful
 		const shortcutsKey = this.getAppKeyDisplay("app.shortcuts");
 		const exit = this.getAppKeyDisplay("app.exit");
 		const selectModel = this.getAppKeyDisplay("app.model.select");
+		const cycleModelForward = this.getAppKeyDisplay("app.model.cycleForward");
+		const cycleModelBackward = this.getAppKeyDisplay("app.model.cycleBackward");
 		const expandTools = this.getAppKeyDisplay("app.tools.expand");
 		const toggleThinking = this.getAppKeyDisplay("app.thinking.toggle");
 		const focusSubagents = this.getAppKeyDisplay("app.subagents.focus");
@@ -9686,6 +9743,7 @@ ${shortcutsKey ? `\`${shortcutsKey}\` quick shortcuts · ` : ""}\`/hotkeys\` ful
 | \`${clear}\` | Interrupt current operation (first) / exit (second) |
 ${interrupt ? `| \`${interrupt}\` | Interrupt current operation |\n` : ""}${shortcutsKey ? `| \`${shortcutsKey}\` | Show quick shortcuts |\n` : ""}| \`${exit}\` | Exit (when editor is empty) |
 | \`${selectModel}\` | Open model selector |
+| \`${cycleModelForward}\` / \`${cycleModelBackward}\` | Cycle to the next / previous model |
 | \`${expandTools}\` | Toggle tool output expansion |
 | \`${toggleThinking}\` | Toggle thinking block visibility |
 | \`${focusSubagents}\` | Focus the subagent summary / open the scoped agents view |
