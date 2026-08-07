@@ -1169,6 +1169,7 @@ describe("InteractiveMode connection events", () => {
 			refreshConnectionQueue: vi.fn(async () => {
 				throw new Error("queue unavailable");
 			}),
+			syncClientUiExtensionSessionView: vi.fn(async () => {}),
 			syncWorkingLoader: vi.fn(),
 		};
 
@@ -1547,6 +1548,7 @@ describe("InteractiveMode connection events", () => {
 			resetCurrentSessionRenderState: () => calls.push("reset"),
 			renderInitialMessages: async () => calls.push("messages"),
 			refreshConnectionQueue: async () => calls.push("queue"),
+			syncClientUiExtensionSessionView: async () => calls.push("uiSync"),
 			syncWorkingLoader: () => calls.push("loader"),
 		};
 
@@ -1556,7 +1558,7 @@ describe("InteractiveMode connection events", () => {
 			}
 		).renderCurrentSessionState.call(fakeThis);
 
-		expect(calls).toEqual(["replacement", "reset", "messages", "queue", "loader"]);
+		expect(calls).toEqual(["replacement", "reset", "messages", "queue", "uiSync", "loader"]);
 	});
 
 	test("drops a queued source event after the session is replaced", async () => {
