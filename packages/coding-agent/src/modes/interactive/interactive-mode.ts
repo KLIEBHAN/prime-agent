@@ -818,6 +818,7 @@ export class InteractiveMode {
 	private localSessionHost: InteractiveModeLocalSessionHost | undefined;
 	private bindLocalSessionExtensions: boolean;
 	private clientUiExtensions: ClientUiExtensionRunner | undefined;
+	private clientUiExtensionsBound = false;
 	private ui: TUI;
 	private chatContainer: Container;
 	private shortcutGuideContainer: Container;
@@ -2481,7 +2482,31 @@ export class InteractiveMode {
 			this.showExtensionError(error.extensionPath, error.error, error.stack);
 		});
 		await this.clientUiExtensions.bind(this.createExtensionUIContext());
+		this.clientUiExtensionsBound = true;
 		this.setupExtensionShortcuts(runner);
+	}
+
+	/**
+	 * Refresh the client-local session view after the daemon-side conversation
+	 * changed, and tell client-loaded extensions when the branch moved.
+	 *
+	 * Without this, extensions bound in the terminal process (custom editors,
+	 * autocomplete) read the session branch as of attach time for the whole
+	 * process lifetime.
+	 */
+	private async syncClientUiExtensionSessionView(): Promise<void> {
+		if (!this.clientUiExtensions || !this.clientUiExtensionsBound) {
+			return;
+		}
+		const result = this.clientUiExtensions.syncSessionView(this.connectionState?.sessionFile);
+		if (!result.changed) {
+			return;
+		}
+		await this.clientUiExtensions.runner.emit({
+			type: "session_tree",
+			newLeafId: result.newLeafId,
+			oldLeafId: result.oldLeafId,
+		});
 	}
 
 	private async executeClientUiExtensionCommand(commandName: string, args: string): Promise<void> {
@@ -2968,6 +2993,7 @@ export class InteractiveMode {
 		// The session transition and transcript are already authoritative here;
 		// a transient queue read must not turn a successful switch into a fatal error.
 		await this.refreshConnectionQueue().catch(() => undefined);
+		await this.syncClientUiExtensionSessionView();
 		this.syncWorkingLoader();
 	}
 
@@ -4668,6 +4694,7 @@ export class InteractiveMode {
 		this.clearSideQuestion({ abort: true });
 		this.chatContainer.clear();
 		await this.renderInitialMessages();
+		await this.syncClientUiExtensionSessionView();
 		if (result.editorText && !this.editor.getText().trim()) {
 			this.editor.setText(result.editorText);
 		}
@@ -5681,6 +5708,8 @@ export class InteractiveMode {
 				// Do not hold its start event behind a stats RPC; stale refreshes are discarded.
 				void this.refreshConnectionContextUsage();
 
+				await this.syncClientUiExtensionSessionView();
+
 				await this.checkShutdownRequested();
 
 				this.ui.requestRender();
@@ -5712,6 +5741,7 @@ export class InteractiveMode {
 						this.showError(`Compaction succeeded, but the transcript could not be refreshed: ${message}`);
 					}
 					await this.refreshConnectionContextUsage();
+					await this.syncClientUiExtensionSessionView();
 					this.footer.invalidate();
 				} else if (event.errorMessage && event.reason === "manual") {
 					if (event.errorSeverity === "warning") this.showWarning(event.errorMessage);

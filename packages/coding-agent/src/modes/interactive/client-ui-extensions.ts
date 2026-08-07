@@ -18,10 +18,24 @@ export interface ClientUiExtensionRunnerOptions {
 	sessionManager: SessionManager;
 }
 
+export interface ClientUiExtensionSessionViewSync {
+	changed: boolean;
+	oldLeafId: string | null;
+	newLeafId: string | null;
+}
+
 export interface ClientUiExtensionRunner {
 	readonly runner: ExtensionRunner;
 	readonly modelRegistry: ModelRegistry;
 	bind(uiContext: ExtensionUIContext): Promise<void>;
+	/**
+	 * Refresh the client-local session view from the worker-owned session file.
+	 *
+	 * The daemon worker appends conversation entries as the session progresses;
+	 * without this, client-loaded extensions would read the branch as of attach
+	 * time for the whole process lifetime.
+	 */
+	syncSessionView(sessionFile?: string): ClientUiExtensionSessionViewSync;
 }
 
 /**
@@ -47,6 +61,11 @@ export function createClientUiExtensionRunner(options: ClientUiExtensionRunnerOp
 		bind: async (uiContext) => {
 			runner.setUIContext(uiContext, "tui");
 			await runner.emit({ type: "session_start", reason: "startup" });
+		},
+		syncSessionView: (sessionFile) => {
+			const oldLeafId = options.sessionManager.getLeafId();
+			const changed = options.sessionManager.reloadFromDisk(sessionFile);
+			return { changed, oldLeafId, newLeafId: options.sessionManager.getLeafId() };
 		},
 	};
 }
