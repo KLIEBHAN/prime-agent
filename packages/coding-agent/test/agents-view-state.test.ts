@@ -18,7 +18,7 @@ import {
 	getAgentsViewDepth,
 	resolveAgentsViewActiveSummaryForPath,
 	resolveAgentsViewOpenCwd,
-	resolveAgentsViewSessionUiServices,
+	resolveAgentsViewSessionUi,
 	shouldReconnectAgentsViewDaemon,
 } from "../src/modes/agents-view/agents-view-mode.js";
 import {
@@ -858,22 +858,28 @@ describe("agents view state", () => {
 		expect(shouldReconnectAgentsViewDaemon("shutdown")).toBe(false);
 	});
 
-	test("uses session-specific UI services when opening an agent", async () => {
+	test("uses session-specific UI wiring when opening an agent", async () => {
 		const dashboardServices = makeUiServices("/tmp/dashboard");
 		const sessionServices = makeUiServices("/tmp/project");
 		const summary = makeSummary({ cwd: "/tmp/project", sessionFile: "/tmp/project/session.jsonl" });
-		const createUiServicesForSession = vi.fn(async () => sessionServices);
+		const clientUiExtensions = {} as never;
+		const createSessionUi = vi.fn(async () => ({ uiServices: sessionServices, clientUiExtensions }));
 
-		await expect(
-			resolveAgentsViewSessionUiServices(
-				{
-					uiServices: dashboardServices,
-					createUiServicesForSession,
-				},
-				summary,
-			),
-		).resolves.toBe(sessionServices);
-		expect(createUiServicesForSession).toHaveBeenCalledWith(summary);
+		const sessionUi = await resolveAgentsViewSessionUi(
+			{
+				uiServices: dashboardServices,
+				createSessionUi,
+			},
+			summary,
+		);
+		expect(sessionUi.uiServices).toBe(sessionServices);
+		expect(sessionUi.clientUiExtensions).toBe(clientUiExtensions);
+		expect(createSessionUi).toHaveBeenCalledWith(summary);
+
+		// Without a factory the dashboard services apply and no extensions bind.
+		const fallback = await resolveAgentsViewSessionUi({ uiServices: dashboardServices }, summary);
+		expect(fallback.uiServices).toBe(dashboardServices);
+		expect(fallback.clientUiExtensions).toBeUndefined();
 	});
 
 	test("reconciles canonical paths and session ids while retaining saved search text", () => {

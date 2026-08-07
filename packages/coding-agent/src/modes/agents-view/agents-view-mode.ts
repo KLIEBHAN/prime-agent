@@ -44,6 +44,7 @@ import {
 	listDaemonSavedSessions,
 	renameDaemonSavedSession,
 } from "../daemon/saved-session-catalog.js";
+import type { ClientUiExtensionRunner } from "../interactive/client-ui-extensions.js";
 import { CustomEditor } from "../interactive/components/custom-editor.js";
 import { keyText } from "../interactive/components/keybinding-hints.js";
 import { BrandSplashHeader, InteractiveMode } from "../interactive/interactive-mode.js";
@@ -117,7 +118,7 @@ export interface AgentsViewModeOptions {
 	socketPath?: string;
 	config: AgentSessionRuntimeConfig;
 	uiServices: InteractiveModeUiServices;
-	createUiServicesForSession?: (summary: SessionSummary) => Promise<InteractiveModeUiServices>;
+	createSessionUi?: (summary: SessionSummary) => Promise<AgentsViewSessionUi>;
 	migratedProviders?: string[];
 	modelFallbackMessage?: string;
 	startupModelId?: string;
@@ -184,11 +185,22 @@ type PendingKillSubagent = {
 	childId: string;
 };
 
-export async function resolveAgentsViewSessionUiServices(
-	options: Pick<AgentsViewModeOptions, "createUiServicesForSession" | "uiServices">,
+/** Per-session UI wiring for chats opened from the agents view. */
+export interface AgentsViewSessionUi {
+	uiServices: InteractiveModeUiServices;
+	/**
+	 * Terminal-process extension binding for the opened chat. Without it,
+	 * UI-owning extensions (custom editors, autocomplete) are unavailable in
+	 * sessions entered through the agents view, unlike directly launched chats.
+	 */
+	clientUiExtensions?: ClientUiExtensionRunner;
+}
+
+export async function resolveAgentsViewSessionUi(
+	options: Pick<AgentsViewModeOptions, "createSessionUi" | "uiServices">,
 	summary: SessionSummary,
-): Promise<InteractiveModeUiServices> {
-	return options.createUiServicesForSession ? await options.createUiServicesForSession(summary) : options.uiServices;
+): Promise<AgentsViewSessionUi> {
+	return options.createSessionUi ? await options.createSessionUi(summary) : { uiServices: options.uiServices };
 }
 
 // Stripping cwd opens the session in its own stored directory; overrideCwd is
@@ -450,11 +462,12 @@ export async function runAgentsViewMode(options: AgentsViewModeOptions): Promise
 					opened.cwdFallbackNotice,
 				);
 			}
-			const uiServices = await resolveAgentsViewSessionUiServices(options, opened.summary);
+			const sessionUi = await resolveAgentsViewSessionUi(options, opened.summary);
 			const interactiveMode = new InteractiveMode({
 				agentConnection: opened.connection,
 				daemonSocketPath: options.socketPath,
-				uiServices,
+				uiServices: sessionUi.uiServices,
+				clientUiExtensions: sessionUi.clientUiExtensions,
 				promptStashStore,
 				promptStashSessionId: opened.summary.sessionId,
 				bindLocalSessionExtensions: false,
