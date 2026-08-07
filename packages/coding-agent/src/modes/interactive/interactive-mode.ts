@@ -1663,6 +1663,13 @@ export class InteractiveMode {
 			startupAdmissionAbort.abort();
 			settleStartupPrompts("lifecycle-cancelled");
 			this.admitPendingStartupPrompts = undefined;
+			// The agents-view loop keeps the process alive across chats; tear down
+			// client-bound extensions so they release editors, timers, and requests.
+			if (this.clientUiExtensions && this.clientUiExtensionsBound) {
+				await this.clientUiExtensions.runner
+					.emit({ type: "session_shutdown", reason: "quit" })
+					.catch(() => undefined);
+			}
 		}
 
 		const state = this.connectionState;

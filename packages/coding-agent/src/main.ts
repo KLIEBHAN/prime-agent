@@ -1380,7 +1380,7 @@ export async function main(args: string[], options?: MainOptions) {
 				config: defaultSessionConfig,
 				uiServices: daemonUiServices,
 				recoverDaemon: () => ensureInteractiveDaemonRunning(daemonSocketPath),
-				createUiServicesForSession: async (summary) => {
+				createSessionUi: async (summary) => {
 					const attachedSessionManager = createSessionManagerForActiveDaemonSummary(
 						summary,
 						sessionManager.getCwd(),
@@ -1394,10 +1394,16 @@ export async function main(args: string[], options?: MainOptions) {
 						sessionManager: attachedSessionManager,
 						extensionFactories: options?.extensionFactories,
 					});
-					return createInteractiveModeUiServicesFromServices({
-						services: attachedPrepared.services,
-						sessionManager: attachedSessionManager,
-					});
+					return {
+						uiServices: createInteractiveModeUiServicesFromServices({
+							services: attachedPrepared.services,
+							sessionManager: attachedSessionManager,
+						}),
+						clientUiExtensions: createClientUiExtensionRunner({
+							services: attachedPrepared.services,
+							sessionManager: attachedSessionManager,
+						}),
+					};
 				},
 				migratedProviders,
 				modelFallbackMessage: startupModel.modelFallbackMessage,
