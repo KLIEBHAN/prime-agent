@@ -3,10 +3,16 @@
 ## [Unreleased]
 
 - Added back the model cycling shortcut as the configurable `app.model.cycleForward` (`Ctrl+P`) and `app.model.cycleBackward` (`Shift+Ctrl+P`) keybindings.
-- Fixed the bundled `websearch` skill description and missing-key guidance omitting the `/login` → **MCP Connections** step required to configure Serper.
+- Changed sent agent messages in the IPython cell UI to show only the message text with a `╰─` gutter when expanded, matching received messages, and hid the raw `agent_message.send` receipt dictionary.
+- Fixed Homebrew installs attempting to self-update their versioned Cellar keg instead of directing users to `brew upgrade prime-agent` ([#844](https://github.com/PrimeIntellect-ai/prime-agent/issues/844))
 - Fixed client-loaded UI extensions in daemon-backed chats reading a session branch frozen at attach time; the client session view now refreshes after each turn, compaction, and session switch, and extensions receive a `session_tree` event when the branch moves.
 - Fixed extension loading from a source checkout failing because the `@earendil-works/pi-ai/mcp` subpath import was not alias-mapped.
 - Fixed UI-owning extensions (custom editors, autocomplete) being unavailable in chats opened from the agents view; they now bind per opened session and are torn down when returning to the view.
+
+## [0.7.1] - 2026-08-07
+
+- Fixed the bundled `websearch` skill description and missing-key guidance omitting the `/login` → **MCP Connections** step required to configure Serper.
+- Fixed `retry_worker` cancelling its own recovery when a stopped session worker left a saved stop marker behind, leaving the session stuck at "Session worker is not connected".
 
 ## [0.7.0] - 2026-08-05
 
