@@ -596,3 +596,85 @@ describe("SessionManager.setSessionFile with corrupted files", () => {
 		expect(sm2.getHeader()?.type).toBe("session");
 	});
 });
+
+describe("SessionManager.reloadFromDisk", () => {
+	let tempDir: string;
+
+	beforeEach(() => {
+		tempDir = join(tmpdir(), `session-reload-test-${Date.now()}`);
+		mkdirSync(tempDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	it("picks up entries appended by another manager on the same file", () => {
+		const writer = SessionManager.create("/tmp", tempDir);
+		const firstId = writer.appendMessage({ role: "user", content: "first", timestamp: 1 });
+		writer.flushNow();
+		const sessionFile = writer.getSessionFile()!;
+
+		const reader = SessionManager.open(sessionFile);
+		expect(reader.getBranch().map((e) => e.id)).toEqual([firstId]);
+
+		const secondId = writer.appendMessage({ role: "user", content: "second", timestamp: 2 });
+		writer.flushNow();
+
+		expect(reader.reloadFromDisk()).toBe(true);
+		expect(reader.getBranch().map((e) => e.id)).toEqual([firstId, secondId]);
+		expect(reader.getLeafId()).toBe(secondId);
+	});
+
+	it("returns false when nothing changed", () => {
+		const writer = SessionManager.create("/tmp", tempDir);
+		writer.appendMessage({ role: "user", content: "first", timestamp: 1 });
+		writer.flushNow();
+		const reader = SessionManager.open(writer.getSessionFile()!);
+
+		expect(reader.reloadFromDisk()).toBe(false);
+	});
+
+	it("switches to a different session file when given one", () => {
+		const writerA = SessionManager.create("/tmp", tempDir);
+		writerA.appendMessage({ role: "user", content: "a", timestamp: 1 });
+		writerA.flushNow();
+		const writerB = SessionManager.create("/tmp", tempDir);
+		const bId = writerB.appendMessage({ role: "user", content: "b", timestamp: 1 });
+		writerB.flushNow();
+
+		const reader = SessionManager.open(writerA.getSessionFile()!);
+		expect(reader.reloadFromDisk(writerB.getSessionFile()!)).toBe(true);
+		expect(reader.getSessionId()).toBe(writerB.getSessionId());
+		expect(reader.getBranch().map((e) => e.id)).toEqual([bId]);
+	});
+
+	it("keeps the current view for a missing or headerless target", () => {
+		const writer = SessionManager.create("/tmp", tempDir);
+		const id = writer.appendMessage({ role: "user", content: "kept", timestamp: 1 });
+		writer.flushNow();
+		const reader = SessionManager.open(writer.getSessionFile()!);
+
+		expect(reader.reloadFromDisk(join(tempDir, "missing.jsonl"))).toBe(false);
+
+		const headerless = join(tempDir, "headerless.jsonl");
+		writeFileSync(headerless, '{"type":"message","id":"x"}\n');
+		expect(reader.reloadFromDisk(headerless)).toBe(false);
+
+		expect(reader.getBranch().map((e) => e.id)).toEqual([id]);
+		expect(reader.getSessionFile()).toBe(writer.getSessionFile());
+	});
+
+	it("never writes to the session file", () => {
+		const writer = SessionManager.create("/tmp", tempDir);
+		writer.appendMessage({ role: "user", content: "first", timestamp: 1 });
+		writer.flushNow();
+		const sessionFile = writer.getSessionFile()!;
+		const before = readFileSync(sessionFile, "utf8");
+
+		const reader = SessionManager.open(sessionFile);
+		reader.reloadFromDisk();
+
+		expect(readFileSync(sessionFile, "utf8")).toBe(before);
+	});
+});

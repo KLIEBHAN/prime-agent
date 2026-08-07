@@ -1265,6 +1265,41 @@ export class SessionManager {
 		}
 	}
 
+	/**
+	 * Re-read entries from a session file without any write-back.
+	 *
+	 * Daemon-backed interactive clients keep a local SessionManager over the
+	 * worker-owned session file, which the worker appends to as the
+	 * conversation progresses. This refreshes the in-memory view (entries,
+	 * index, leaf) so client-side consumers such as extension context see the
+	 * current branch. Unlike setSessionFile, it never rewrites, migrates, or
+	 * creates a session: an unreadable or headerless target leaves the current
+	 * state untouched.
+	 *
+	 * @param sessionFile Optional new target when the worker switched files.
+	 * @returns true when the view changed (leaf, entry count, or target file).
+	 */
+	reloadFromDisk(sessionFile?: string): boolean {
+		const targetFile = sessionFile !== undefined ? resolve(sessionFile) : this.sessionFile;
+		if (!targetFile || !existsSync(targetFile)) return false;
+		let entries: FileEntry[];
+		try {
+			entries = loadEntriesFromFile(targetFile);
+		} catch {
+			return false;
+		}
+		const header = entries.find((e): e is SessionHeader => e.type === "session");
+		if (!header || typeof header.id !== "string") return false;
+		const previousLeafId = this.leafId;
+		const previousCount = this.fileEntries.length;
+		const fileChanged = targetFile !== this.sessionFile;
+		this.sessionFile = targetFile;
+		this.sessionId = header.id;
+		this.fileEntries = entries;
+		this._buildIndex();
+		return fileChanged || this.leafId !== previousLeafId || this.fileEntries.length !== previousCount;
+	}
+
 	newSession(options?: NewSessionOptions): string | undefined {
 		let sessionId = options?.id ?? createSessionId();
 		let sessionFile: string | undefined;

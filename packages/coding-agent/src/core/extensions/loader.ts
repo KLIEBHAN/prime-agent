@@ -62,6 +62,7 @@ function getAliases(): Record<string, string> {
 	// separate compat entry yet, so map the subpath to the root entry.
 	const piAiCompatEntry = piAiEntry;
 	const piAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@earendil-works/pi-ai/oauth");
+	const piAiMcpEntry = resolveWorkspaceOrImport("ai/dist/mcp.js", "@earendil-works/pi-ai/mcp");
 
 	_aliases = {
 		"@earendil-works/pi-coding-agent": piCodingAgentEntry,
@@ -70,12 +71,14 @@ function getAliases(): Record<string, string> {
 		"@earendil-works/pi-ai": piAiEntry,
 		"@earendil-works/pi-ai/compat": piAiCompatEntry,
 		"@earendil-works/pi-ai/oauth": piAiOauthEntry,
+		"@earendil-works/pi-ai/mcp": piAiMcpEntry,
 		"@mariozechner/pi-coding-agent": piCodingAgentEntry,
 		"@mariozechner/pi-agent-core": piAgentCoreEntry,
 		"@mariozechner/pi-tui": piTuiEntry,
 		"@mariozechner/pi-ai": piAiEntry,
 		"@mariozechner/pi-ai/compat": piAiCompatEntry,
 		"@mariozechner/pi-ai/oauth": piAiOauthEntry,
+		"@mariozechner/pi-ai/mcp": piAiMcpEntry,
 		typebox: typeboxEntry,
 		"typebox/compile": typeboxCompileEntry,
 		"typebox/value": typeboxValueEntry,

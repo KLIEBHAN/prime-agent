@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 - Fixed the bundled `websearch` skill description and missing-key guidance omitting the `/login` → **MCP Connections** step required to configure Serper.
+- Fixed client-loaded UI extensions in daemon-backed chats reading a session branch frozen at attach time; the client session view now refreshes after each turn, compaction, and session switch, and extensions receive a `session_tree` event when the branch moves.
+- Fixed extension loading from a source checkout failing because the `@earendil-works/pi-ai/mcp` subpath import was not alias-mapped.
 
 ## [0.7.0] - 2026-08-05
 
