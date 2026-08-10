@@ -2,13 +2,16 @@
 
 ## [Unreleased]
 
+- Added a configurable copy action to login dialogs so raw sign-in URLs can be copied without selecting wrapped text ([#643](https://github.com/PrimeIntellect-ai/prime-agent/issues/643)).
 - Added back the model cycling shortcut as the configurable `app.model.cycleForward` (`Ctrl+P`) and `app.model.cycleBackward` (`Shift+Ctrl+P`) keybindings.
 - Added privacy-safe pseudonymous product analytics for onboarding, command use, execution modes, run outcomes, TTFT, latency, usage, tools, retries, and compactions, with disclosure and opt-out controls ([ENG-4682](https://linear.app/primeintellect/issue/ENG-4682/add-privacy-safe-posthog-analytics-to-prime-agent)).
 - Changed sent agent messages in the IPython cell UI to show only the message text with a `╰─` gutter when expanded, matching received messages, and hid the raw `agent_message.send` receipt dictionary.
 - Fixed Homebrew installs attempting to self-update their versioned Cellar keg instead of directing users to `brew upgrade prime-agent` ([#844](https://github.com/PrimeIntellect-ai/prime-agent/issues/844))
 - Fixed client-loaded UI extensions in daemon-backed chats reading a session branch frozen at attach time; the client session view now refreshes after each turn, compaction, and session switch, and extensions receive a `session_tree` event when the branch moves.
 - Fixed extension loading from a source checkout failing because the `@earendil-works/pi-ai/mcp` subpath import was not alias-mapped.
+- Fixed the agents view collapsing expanded subagent lists when returning from an opened agent ([ENG-5105](https://linear.app/primeintellect/issue/ENG-5105/keep-the-agents-view-state-persistent)).
 - Fixed UI-owning extensions (custom editors, autocomplete) being unavailable in chats opened from the agents view; they now bind per opened session and are torn down when returning to the view.
+- Kept the subagent summary row visible and selectable while its list is expanded in the agents view, so pressing enter on it collapses the list again ([ENG-5105](https://linear.app/primeintellect/issue/ENG-5105/keep-the-agents-view-state-persistent)).
 
 ## [0.7.1] - 2026-08-07
 
