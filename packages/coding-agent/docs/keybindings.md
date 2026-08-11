@@ -132,8 +132,12 @@ Use `tab` to cycle forward and `shift+tab` to cycle backward through Providers, 
 | Keybinding id | Default | Description |
 |--------|---------|-------------|
 | `app.tools.expand` | `ctrl+o` | Collapse or expand tool output |
+| `app.messages.expand` | `alt+p` | Collapse or expand agent-to-agent messages |
 | `app.message.followUp` | `alt+enter` | Queue follow-up message |
-| `app.message.dequeue` | `alt+up` | Restore queued messages to editor |
+| `app.message.navigateOlder` | `alt+up` | Select the next older pending message |
+| `app.message.navigateNewer` | `alt+down` | Select the next newer pending message or restore the draft |
+| `app.message.moveEarlier` | `ctrl+alt+up` | Move the selected pending message one place earlier in its queue |
+| `app.message.moveLater` | `ctrl+alt+down` | Move the selected pending message one place later in its queue |
 
 ### Tree Navigation
 
@@ -181,6 +185,8 @@ Each action can have a single key or an array of keys. User config overrides def
 On native Windows, `app.suspend` has no default binding because Windows terminals do not support Unix job control. If you bind it manually, Prime Agent shows a status message instead of suspending. In WSL, the normal Linux `ctrl+z`/`fg` behavior still applies.
 
 ### Emacs Example
+
+In this fork `app.messages.expand` defaults to `alt+p`, so binding `ctrl+p` below does not release an editor-scoped default. Note that `app.model.cycleForward` keeps its app-level `ctrl+p` default; rebind it as well if you use these bindings.
 
 ```json
 {

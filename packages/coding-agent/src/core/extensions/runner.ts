@@ -69,6 +69,7 @@ const RESERVED_KEYBINDINGS_FOR_EXTENSION_CONFLICTS = [
 	"app.model.cycleForward",
 	"app.model.cycleBackward",
 	"app.tools.expand",
+	"app.messages.expand",
 	"app.thinking.toggle",
 	"app.subagents.focus",
 	"app.editor.external",

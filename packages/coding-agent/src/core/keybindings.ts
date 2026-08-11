@@ -23,6 +23,7 @@ export interface AppKeybindings {
 	"app.model.toggleScope": true;
 	"app.configuration.previousTab": true;
 	"app.tools.expand": true;
+	"app.messages.expand": true;
 	"app.thinking.toggle": true;
 	"app.subagents.focus": true;
 	"app.heartbeats.open": true;
@@ -30,7 +31,10 @@ export interface AppKeybindings {
 	"app.editor.external": true;
 	"app.prompt.stash": true;
 	"app.message.followUp": true;
-	"app.message.dequeue": true;
+	"app.message.navigateOlder": true;
+	"app.message.navigateNewer": true;
+	"app.message.moveEarlier": true;
+	"app.message.moveLater": true;
 	"app.clipboard.pasteImage": true;
 	"app.clipboard.copyLoginUrl": true;
 	"app.session.new": true;
@@ -92,10 +96,16 @@ export const KEYBINDINGS = {
 	},
 	"app.model.toggleScope": { defaultKeys: "alt+s", description: "Toggle model selector scope" },
 	"app.configuration.previousTab": { defaultKeys: "shift+tab", description: "Select previous configuration tab" },
-	"app.tools.expand": { defaultKeys: "ctrl+o", description: "Toggle tool output" },
+	"app.tools.expand": { defaultKeys: "ctrl+o", description: "Toggle tool output", defaultKeyScope: "editor" },
+	"app.messages.expand": {
+		defaultKeys: "alt+p",
+		description: "Toggle agent message expansion",
+		defaultKeyScope: "editor",
+	},
 	"app.thinking.toggle": {
 		defaultKeys: "ctrl+t",
 		description: "Toggle thinking blocks",
+		defaultKeyScope: "editor",
 	},
 	"app.subagents.focus": {
 		defaultKeys: "alt+a",
@@ -121,9 +131,21 @@ export const KEYBINDINGS = {
 		defaultKeys: "alt+enter",
 		description: "Queue follow-up message",
 	},
-	"app.message.dequeue": {
+	"app.message.navigateOlder": {
 		defaultKeys: "alt+up",
-		description: "Restore queued messages",
+		description: "Select older pending message",
+	},
+	"app.message.navigateNewer": {
+		defaultKeys: "alt+down",
+		description: "Select newer pending message or draft",
+	},
+	"app.message.moveEarlier": {
+		defaultKeys: "ctrl+alt+up",
+		description: "Move selected pending message earlier",
+	},
+	"app.message.moveLater": {
+		defaultKeys: "ctrl+alt+down",
+		description: "Move selected pending message later",
 	},
 	"app.clipboard.pasteImage": {
 		defaultKeys: process.platform === "win32" ? "alt+v" : "ctrl+v",
@@ -216,6 +238,7 @@ export const KEYBINDINGS = {
 } as const satisfies KeybindingDefinitions;
 
 const KEYBINDING_NAME_MIGRATIONS = {
+	"app.message.dequeue": "app.message.navigateOlder",
 	cursorUp: "tui.editor.cursorUp",
 	cursorDown: "tui.editor.cursorDown",
 	cursorLeft: "tui.editor.cursorLeft",
@@ -260,7 +283,7 @@ const KEYBINDING_NAME_MIGRATIONS = {
 	focusSubagents: "app.subagents.focus",
 	externalEditor: "app.editor.external",
 	followUp: "app.message.followUp",
-	dequeue: "app.message.dequeue",
+	dequeue: "app.message.navigateOlder",
 	pasteImage: "app.clipboard.pasteImage",
 	newSession: "app.session.new",
 	tree: "app.session.tree",
