@@ -118,6 +118,7 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 | `app.model.cycleBackward` | `shift+ctrl+p` | Cycle to the previous model |
 | `app.model.toggleScope` | `alt+s` | Toggle between all and scoped models |
 | `app.thinking.toggle` | `ctrl+t` | Collapse or expand thinking blocks |
+| `app.thinking.cycle` | `shift+tab` | Cycle to the next thinking level |
 
 ### Configuration Menu
 

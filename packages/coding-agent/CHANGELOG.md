@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 - Added back the model cycling shortcut as the configurable `app.model.cycleForward` (`Ctrl+P`) and `app.model.cycleBackward` (`Shift+Ctrl+P`) keybindings.
+- Added the configurable `app.thinking.cycle` (`Shift+Tab`) keybinding to cycle through the available thinking levels, matching the `/effort` selector.
+- Fixed `/update --extensions` in the TUI exiting with code 1; the interactive handler now translates legacy extension-update arguments to the `package update` CLI while keeping self-updates unchanged.
 - Fixed client-loaded UI extensions in daemon-backed chats reading a session branch frozen at attach time; the client session view now refreshes after each turn, compaction, and session switch, and extensions receive a `session_tree` event when the branch moves.
 - Fixed extension loading from a source checkout failing because the `@earendil-works/pi-ai/mcp` subpath import was not alias-mapped.
 - Fixed UI-owning extensions (custom editors, autocomplete) being unavailable in chats opened from the agents view; they now bind per opened session and are torn down when returning to the view.

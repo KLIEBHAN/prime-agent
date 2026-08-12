@@ -4350,6 +4350,7 @@ export class InteractiveMode {
 		this.defaultEditor.onAction("app.tools.expand", () => this.toggleToolOutputExpansion());
 		this.defaultEditor.onAction("app.messages.expand", () => this.toggleAgentMessageExpansion());
 		this.defaultEditor.onAction("app.thinking.toggle", () => this.toggleThinkingBlockVisibility());
+		this.defaultEditor.onAction("app.thinking.cycle", () => this.cycleThinkingLevel());
 		this.defaultEditor.onAction("app.subagents.focus", () => this.focusSubagentSummary());
 		this.defaultEditor.onAction("app.heartbeats.open", () => {
 			void this.showHeartbeatManager();
@@ -8221,6 +8222,18 @@ export class InteractiveMode {
 		this.applyThinkingLevel(requested as ThinkingLevel);
 	}
 
+	private cycleThinkingLevel(): void {
+		const levels = this.getAvailableThinkingLevels();
+		if (levels.length === 0) {
+			this.showStatus("Current model does not support thinking");
+			return;
+		}
+		const current = this.connectionState?.thinkingLevel;
+		const index = current ? levels.indexOf(current) : -1;
+		const next = levels[(index + 1) % levels.length];
+		this.applyThinkingLevel(next);
+	}
+
 	private showThinkingSelector(levels: ThinkingLevel[] = this.getAvailableThinkingLevels()): void {
 		const currentLevel = this.connectionState?.thinkingLevel ?? levels[0];
 		if (!currentLevel) {
@@ -8909,21 +8922,19 @@ export class InteractiveMode {
 			updateArgs,
 			resolveDaemonUpdateRestartSocketPath(this.options.daemonSocketPath),
 		);
-		const updateChildArgs = includesSelf ? buildUpdateChildArgs(updateArgs, daemonSocketPath) : updateArgs;
+		const updateChildArgs = includesSelf
+			? ["update", ...buildUpdateChildArgs(updateArgs, daemonSocketPath)]
+			: ["package", "update", ...updateArgs.filter((arg) => arg !== "--extensions" && arg !== "--extension")];
 		this.stopWorkingLoader();
 		await this.ui.terminal.drainInput(1000).catch(() => undefined);
 		this.ui.stop();
 
 		const updateEnv = includesSelf ? { ...process.env, [SELF_UPDATE_INTERACTIVE_CHILD_ENV]: "1" } : process.env;
-		const updateResult = spawnSync(
-			process.execPath,
-			[...process.execArgv, entrypoint, "update", ...updateChildArgs],
-			{
-				stdio: "inherit",
-				cwd: updateCwd,
-				env: updateEnv,
-			},
-		);
+		const updateResult = spawnSync(process.execPath, [...process.execArgv, entrypoint, ...updateChildArgs], {
+			stdio: "inherit",
+			cwd: updateCwd,
+			env: updateEnv,
+		});
 		const updateExitCode = updateResult.status ?? (updateResult.signal ? 1 : 0);
 		const selfUpdateNotAttempted =
 			includesSelf && !updateResult.error && updateExitCode === SELF_UPDATE_NOT_ATTEMPTED_EXIT_CODE;
