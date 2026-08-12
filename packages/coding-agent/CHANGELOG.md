@@ -8,6 +8,7 @@
 - Fixed client-loaded UI extensions in daemon-backed chats reading a session branch frozen at attach time; the client session view now refreshes after each turn, compaction, and session switch, and extensions receive a `session_tree` event when the branch moves.
 - Fixed extension loading from a source checkout failing because the `@earendil-works/pi-ai/mcp` subpath import was not alias-mapped.
 - Fixed UI-owning extensions (custom editors, autocomplete) being unavailable in chats opened from the agents view; they now bind per opened session and are torn down when returning to the view.
+- Fixed URLs not opening on click in fullscreen mode on terminals such as Ghostty; clicking a link in the transcript, dock, or overlays now opens it in the browser.
 
 ## [0.7.2] - 2026-08-11
 
