@@ -2,13 +2,18 @@
 
 ## [Unreleased]
 
+- Added a working hint that recommends sharing traces with Prime Intellect to help train open-source LLMs.
 - Added back the model cycling shortcut as the configurable `app.model.cycleForward` (`Ctrl+P`) and `app.model.cycleBackward` (`Shift+Ctrl+P`) keybindings.
 - Added the configurable `app.thinking.cycle` (`Shift+Tab`) keybinding to cycle through the available thinking levels, matching the `/effort` selector.
+- Changed the agents view to sort idle and inactive sessions by last message time, newest first, while keeping running agents in stable creation order.
 - Fixed `/update --extensions` in the TUI exiting with code 1; the interactive handler now translates legacy extension-update arguments to the `package update` CLI while keeping self-updates unchanged.
+- Fixed `openai-codex` models being invisible to `rlm` subagents and `find_models` because model discovery reported Prime Agent's own version as the Codex client version ([#1375](https://github.com/PrimeIntellect-ai/prime-agent/pull/1375) by [@bilelrais](https://github.com/bilelrais)).
 - Fixed client-loaded UI extensions in daemon-backed chats reading a session branch frozen at attach time; the client session view now refreshes after each turn, compaction, and session switch, and extensions receive a `session_tree` event when the branch moves.
 - Fixed extension loading from a source checkout failing because the `@earendil-works/pi-ai/mcp` subpath import was not alias-mapped.
 - Fixed UI-owning extensions (custom editors, autocomplete) being unavailable in chats opened from the agents view; they now bind per opened session and are torn down when returning to the view.
+- Restored bare `prime-agent --resume` opening the agents view and the `/resume [id|path]` slash command; bare commands open the agents view and an argument resumes that session in place.
 - Fixed URLs not opening on click in fullscreen mode on terminals such as Ghostty; clicking a link in the transcript, dock, or overlays now opens it in the browser.
+- Fixed `app.messages.expand` (`alt+p` in this fork) only toggling received agent messages; it now expands and collapses sent agent messages together with received ones.
 
 ## [0.7.2] - 2026-08-11
 

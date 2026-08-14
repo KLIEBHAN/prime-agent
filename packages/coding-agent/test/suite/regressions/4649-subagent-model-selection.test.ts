@@ -97,7 +97,7 @@ describe("ENG-4649 subagent model selection", () => {
 			);
 
 			const [catalogUrl] = fetchModels.mock.calls[0] ?? [];
-			expect(new URL(String(catalogUrl)).searchParams.get("client_version")).toBe("0.144.0");
+			expect(new URL(String(catalogUrl)).searchParams.get("client_version")).toBe("0.147.0");
 
 			await expect(
 				harness.session.runRlmChild("reject unsupported account model", {
