@@ -40,6 +40,7 @@ function createFakeThis(overrides: Record<string, unknown> = {}) {
 		}),
 		addMessageToChat: vi.fn(),
 		refreshConnectionContextUsage: vi.fn().mockResolvedValue(undefined),
+		syncClientUiExtensionSessionView: vi.fn().mockResolvedValue(undefined),
 		showError: vi.fn(),
 		showWarning: vi.fn(),
 		showStatus: vi.fn(),

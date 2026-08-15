@@ -15,6 +15,7 @@
 - Restored bare `prime-agent --resume` opening the agents view and the `/resume [id|path]` slash command; bare commands open the agents view and an argument resumes that session in place.
 - Fixed URLs not opening on click in fullscreen mode on terminals such as Ghostty; clicking a link in the transcript, dock, or overlays now opens it in the browser.
 - Fixed `app.messages.expand` (`alt+p` in this fork) only toggling received agent messages; it now expands and collapses sent agent messages together with received ones.
+- Fixed long-running daemons losing their supervisor ownership when the operating system cleans old temporary metadata.
 
 ## [0.7.2] - 2026-08-11
 
