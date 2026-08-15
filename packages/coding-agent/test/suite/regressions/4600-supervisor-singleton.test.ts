@@ -905,6 +905,85 @@ describe("ENG-4600 daemon supervisor ownership", () => {
 		}
 	});
 
+	it("refreshes owner metadata before temporary-file cleanup can age it out", async () => {
+		const paths = await createPaths();
+		const ownership = await acquireDaemonSupervisorOwnership({
+			agentDir: paths.agentDir,
+			appVersion: "test",
+			descriptorDir: paths.descriptorDir,
+			generation: "refreshed-owner",
+			ownerRefreshIntervalMs: 10,
+			registryDir: paths.registryDir,
+			socketPath: paths.socketPath,
+		});
+		const initialUpdatedAt = ownership.record.updatedAt;
+		const ownerPath = ownerRecordPath(paths.registryDir, ownership.record.generation);
+		const scopePath = ownerScopePath(paths.registryDir, ownership.record.generation);
+		const initialOwnerMtimeMs = statSync(ownerPath).mtimeMs;
+		const initialScopeMtimeMs = statSync(scopePath).mtimeMs;
+		rmSync(scopePath);
+
+		try {
+			const deadline = Date.now() + 2000;
+			while (
+				(!existsSync(scopePath) ||
+					ownership.record.updatedAt === initialUpdatedAt ||
+					statSync(ownerPath).mtimeMs <= initialOwnerMtimeMs) &&
+				Date.now() < deadline
+			) {
+				await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+			}
+			const persistedOwner = readOwnerRecord(paths.registryDir, ownership.record.generation);
+			expect(existsSync(scopePath)).toBe(true);
+			expect(statSync(scopePath).mtimeMs).toBeGreaterThan(initialScopeMtimeMs);
+			expect(statSync(ownerPath).mtimeMs).toBeGreaterThan(initialOwnerMtimeMs);
+			expect(ownership.record.updatedAt).not.toBe(initialUpdatedAt);
+			expect(persistedOwner?.updatedAt).toBe(ownership.record.updatedAt);
+			expect(persistedOwner?.token).toBe(ownership.record.token);
+		} finally {
+			await ownership.release();
+		}
+	});
+
+	it("does not refresh altered owner metadata into immutable scope", async () => {
+		const paths = await createPaths();
+		const ownership = await acquireDaemonSupervisorOwnership({
+			agentDir: paths.agentDir,
+			appVersion: "test",
+			descriptorDir: paths.descriptorDir,
+			generation: "altered-owner",
+			ownerRefreshIntervalMs: 10,
+			registryDir: paths.registryDir,
+			socketPath: paths.socketPath,
+		});
+		const originalOwner = { ...ownership.record };
+		const scopePath = ownerScopePath(paths.registryDir, ownership.record.generation);
+		const originalScope = readFileSync(scopePath, "utf8");
+		writeOwnerRecord(paths.registryDir, {
+			...originalOwner,
+			descriptorDir: `${originalOwner.descriptorDir}.altered`,
+		});
+
+		try {
+			await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+			expect(readFileSync(scopePath, "utf8")).toBe(originalScope);
+			await expect(ownership.assertCurrent()).rejects.toThrow(/no longer owns/);
+			await expect(
+				acquireDaemonSupervisorOwnership({
+					agentDir: paths.agentDir,
+					appVersion: "test",
+					descriptorDir: paths.descriptorDir,
+					generation: "altered-owner-contender",
+					registryDir: paths.registryDir,
+					socketPath: `${paths.socketPath}.contender`,
+				}),
+			).rejects.toThrow(/Invalid daemon supervisor owner record/);
+		} finally {
+			writeOwnerRecord(paths.registryDir, originalOwner);
+			await ownership.release();
+		}
+	});
+
 	it("reclaims empty owner directories left by interrupted startup", async () => {
 		const paths = await createPaths();
 		const abandonedDirectory = join(paths.registryDir, "abandoned-owner.owner");
@@ -1117,6 +1196,7 @@ describe("ENG-4600 daemon supervisor ownership", () => {
 			appVersion: "test",
 			descriptorDir: paths.descriptorDir,
 			generation: "retryable-release",
+			ownerRefreshIntervalMs: 10,
 			registryDir: paths.registryDir,
 			socketPath: paths.socketPath,
 		});
@@ -1126,6 +1206,12 @@ describe("ENG-4600 daemon supervisor ownership", () => {
 		await expect(ownership.release()).rejects.toThrow();
 		rmSync(paths.registryDir, { force: true });
 		renameSync(movedRegistry, paths.registryDir);
+		const updatedAtAfterFailure = ownership.record.updatedAt;
+		const deadline = Date.now() + 2000;
+		while (ownership.record.updatedAt === updatedAtAfterFailure && Date.now() < deadline) {
+			await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+		}
+		expect(ownership.record.updatedAt).not.toBe(updatedAtAfterFailure);
 		await ownership.release();
 		expect(listOwnerRecords(paths.registryDir)).toEqual([]);
 	});

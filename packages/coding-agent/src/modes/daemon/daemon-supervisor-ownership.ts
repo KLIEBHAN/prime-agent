@@ -21,6 +21,7 @@ const REGISTRY_LOCK_STALE_MS = 5000;
 const REGISTRY_LOCK_UPDATE_MS = 1000;
 const REGISTRY_LOCK_RETRIES = 500;
 const REGISTRY_LOCK_RETRY_MS = 10;
+const OWNER_REFRESH_INTERVAL_MS = 60_000;
 const STARTUP_FENCE_POLL_MS = 250;
 const SHUTDOWN_ADMISSION_FILE_NAME = "shutdown-admission.json";
 const SHUTDOWN_ADMISSION_LEASE_MS = 5000;
@@ -89,6 +90,7 @@ interface AcquireDaemonSupervisorOwnershipOptions {
 	generation: string;
 	appVersion: string;
 	registryDir?: string;
+	ownerRefreshIntervalMs?: number;
 }
 
 class DaemonSupervisorAlreadyRunningError extends Error {
@@ -120,12 +122,39 @@ class DaemonShutdownAdmissionError extends Error {
 
 class DaemonSupervisorOwnership {
 	private released = false;
+	private releasing = false;
+	private refreshPromise?: Promise<void>;
+	private readonly refreshTimer: ReturnType<typeof setInterval>;
 
 	constructor(
 		readonly record: DaemonSupervisorOwnerRecord,
 		private readonly registryDir: string,
 		private readonly ownerDirectory: string,
-	) {}
+		refreshIntervalMs: number,
+	) {
+		this.refreshTimer = setInterval(() => {
+			if (this.released || this.releasing || this.refreshPromise) {
+				return;
+			}
+			const refresh = this.refresh().catch(() => undefined);
+			this.refreshPromise = refresh;
+			void refresh.finally(() => {
+				if (this.refreshPromise === refresh) {
+					this.refreshPromise = undefined;
+				}
+			});
+		}, refreshIntervalMs);
+		this.refreshTimer.unref();
+	}
+
+	private async refresh(): Promise<void> {
+		const updated = await refreshDaemonSupervisorOwner(this.record, this.registryDir);
+		if (!updated) {
+			throw new DaemonSupervisorOwnershipLostError(this.record.generation);
+		}
+		this.record.phase = updated.phase;
+		this.record.updatedAt = updated.updatedAt;
+	}
 
 	async assertCurrent(): Promise<void> {
 		if (this.released) {
@@ -160,8 +189,10 @@ class DaemonSupervisorOwnership {
 		if (this.released) {
 			return;
 		}
+		this.releasing = true;
 		let releasedDirectory: string | undefined;
 		try {
+			await this.refreshPromise;
 			await withDaemonSupervisorRegistryGuard(this.registryDir, () => {
 				const current = readOwnerRecord(this.ownerDirectory);
 				if (!current || current.token !== this.record.token) {
@@ -171,7 +202,11 @@ class DaemonSupervisorOwnership {
 				renameSync(this.ownerDirectory, releasedDirectory);
 			});
 			this.released = true;
+			clearInterval(this.refreshTimer);
 		} finally {
+			if (!this.released) {
+				this.releasing = false;
+			}
 			if (releasedDirectory) {
 				rmSync(releasedDirectory, { recursive: true, force: true });
 			}
@@ -300,10 +335,34 @@ async function mutateDaemonSupervisorOwner(
 	});
 }
 
+async function refreshDaemonSupervisorOwner(
+	expectedOwner: DaemonSupervisorOwnerRecord,
+	registryDir: string,
+): Promise<DaemonSupervisorOwnerRecord | undefined> {
+	return withDaemonSupervisorRegistryGuard(registryDir, () => {
+		const directory = ownerDirectoryPath(registryDir, expectedOwner.generation);
+		if (!existsSync(directory)) {
+			return undefined;
+		}
+		const current = requireOwnerRecord(directory);
+		if (!sameOwnerRecord(current, expectedOwner)) {
+			return undefined;
+		}
+		current.updatedAt = new Date().toISOString();
+		writeOwnerScope(directory, expectedOwner);
+		writeOwnerRecord(directory, current);
+		return current;
+	});
+}
+
 export async function acquireDaemonSupervisorOwnership(
 	options: AcquireDaemonSupervisorOwnershipOptions,
 ): Promise<DaemonSupervisorOwnership> {
 	const registryDir = options.registryDir ?? defaultDaemonSupervisorRegistryDir();
+	const refreshIntervalMs = options.ownerRefreshIntervalMs ?? OWNER_REFRESH_INTERVAL_MS;
+	if (!Number.isFinite(refreshIntervalMs) || refreshIntervalMs <= 0) {
+		throw new Error(`Invalid daemon supervisor owner refresh interval: ${refreshIntervalMs}`);
+	}
 	mkdirSync(registryDir, { recursive: true, mode: 0o700 });
 	const token = randomUUID();
 	const processStartId = getProcessStartId(process.pid);
@@ -359,7 +418,7 @@ export async function acquireDaemonSupervisorOwnership(
 			rmSync(directory, { recursive: true, force: true });
 		}
 	}
-	return new DaemonSupervisorOwnership(record, registryDir, ownerDirectory);
+	return new DaemonSupervisorOwnership(record, registryDir, ownerDirectory, refreshIntervalMs);
 }
 
 export async function assertDaemonSupervisorOwnerCurrent(
@@ -585,7 +644,8 @@ function sameOwnerRecord(left: DaemonSupervisorOwnerRecord, right: DaemonSupervi
 		left.generation === right.generation &&
 		left.pid === right.pid &&
 		left.processStartId === right.processStartId &&
-		left.socketPath === right.socketPath
+		left.socketPath === right.socketPath &&
+		left.descriptorDir === right.descriptorDir
 	);
 }
 
@@ -619,10 +679,13 @@ function readOwnerRecordForScope(
 	isRelevant: (scope: DaemonSupervisorOwnerScope) => boolean,
 ): DaemonSupervisorOwnerRecord | undefined {
 	const owner = readOwnerRecord(directory);
+	const scope = readOwnerScope(directory);
 	if (owner) {
+		if (existsSync(resolve(directory, "scope.json")) && (!scope || !sameOwnerScope(owner, scope))) {
+			throw new Error(`Invalid daemon supervisor owner record: ${directory}`);
+		}
 		return owner;
 	}
-	const scope = readOwnerScope(directory);
 	const entries = !scope ? readdirSync(directory) : [];
 	if (!scope && !entries.includes("owner.json") && !entries.includes("scope.json")) {
 		const abandonedDirectory = `${directory}.abandoned-${randomUUID()}`;
@@ -678,6 +741,17 @@ function readOwnerScope(directory: string): DaemonSupervisorOwnerScope | undefin
 	} catch {
 		return undefined;
 	}
+}
+
+function sameOwnerScope(owner: DaemonSupervisorOwnerRecord, scope: DaemonSupervisorOwnerScope): boolean {
+	return (
+		owner.version === scope.version &&
+		owner.role === scope.role &&
+		owner.token === scope.token &&
+		owner.generation === scope.generation &&
+		owner.socketPath === scope.socketPath &&
+		owner.descriptorDir === scope.descriptorDir
+	);
 }
 
 function isDaemonSupervisorOwnerScope(value: unknown): value is DaemonSupervisorOwnerScope {
