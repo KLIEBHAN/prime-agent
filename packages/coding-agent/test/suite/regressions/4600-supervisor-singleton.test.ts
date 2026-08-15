@@ -940,6 +940,7 @@ describe("ENG-4600 daemon supervisor ownership", () => {
 			expect(ownership.record.updatedAt).not.toBe(initialUpdatedAt);
 			expect(persistedOwner?.updatedAt).toBe(ownership.record.updatedAt);
 			expect(persistedOwner?.token).toBe(ownership.record.token);
+			await expect(ownership.assertCurrent()).resolves.toBeUndefined();
 		} finally {
 			await ownership.release();
 		}
@@ -980,6 +981,46 @@ describe("ENG-4600 daemon supervisor ownership", () => {
 			).rejects.toThrow(/Invalid daemon supervisor owner record/);
 		} finally {
 			writeOwnerRecord(paths.registryDir, originalOwner);
+			await ownership.release();
+		}
+	});
+
+	it("marks ownership lost instead of overwriting altered immutable scope", async () => {
+		const paths = await createPaths();
+		const ownership = await acquireDaemonSupervisorOwnership({
+			agentDir: paths.agentDir,
+			appVersion: "test",
+			descriptorDir: paths.descriptorDir,
+			generation: "altered-scope",
+			ownerRefreshIntervalMs: 10,
+			registryDir: paths.registryDir,
+			socketPath: paths.socketPath,
+		});
+		const scopePath = ownerScopePath(paths.registryDir, ownership.record.generation);
+		const alteredScope = {
+			...(JSON.parse(readFileSync(scopePath, "utf8")) as Record<string, unknown>),
+			descriptorDir: `${ownership.record.descriptorDir}.altered`,
+		};
+		writeFileSync(scopePath, `${JSON.stringify(alteredScope, null, 2)}\n`);
+		const alteredScopeText = readFileSync(scopePath, "utf8");
+		const initialUpdatedAt = ownership.record.updatedAt;
+
+		try {
+			const deadline = Date.now() + 2000;
+			let ownershipLost = false;
+			while (!ownershipLost && Date.now() < deadline) {
+				ownershipLost = await ownership.assertCurrent().then(
+					() => false,
+					() => true,
+				);
+				if (!ownershipLost) {
+					await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+				}
+			}
+			expect(ownershipLost).toBe(true);
+			expect(readFileSync(scopePath, "utf8")).toBe(alteredScopeText);
+			expect(ownership.record.updatedAt).toBe(initialUpdatedAt);
+		} finally {
 			await ownership.release();
 		}
 	});

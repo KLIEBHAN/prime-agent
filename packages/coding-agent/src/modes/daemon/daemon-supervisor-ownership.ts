@@ -123,6 +123,7 @@ class DaemonShutdownAdmissionError extends Error {
 class DaemonSupervisorOwnership {
 	private released = false;
 	private releasing = false;
+	private lost = false;
 	private refreshPromise?: Promise<void>;
 	private readonly refreshTimer: ReturnType<typeof setInterval>;
 
@@ -133,7 +134,7 @@ class DaemonSupervisorOwnership {
 		refreshIntervalMs: number,
 	) {
 		this.refreshTimer = setInterval(() => {
-			if (this.released || this.releasing || this.refreshPromise) {
+			if (this.released || this.releasing || this.lost || this.refreshPromise) {
 				return;
 			}
 			const refresh = this.refresh().catch(() => undefined);
@@ -150,6 +151,7 @@ class DaemonSupervisorOwnership {
 	private async refresh(): Promise<void> {
 		const updated = await refreshDaemonSupervisorOwner(this.record, this.registryDir);
 		if (!updated) {
+			this.lost = true;
 			throw new DaemonSupervisorOwnershipLostError(this.record.generation);
 		}
 		this.record.phase = updated.phase;
@@ -157,7 +159,7 @@ class DaemonSupervisorOwnership {
 	}
 
 	async assertCurrent(): Promise<void> {
-		if (this.released) {
+		if (this.released || this.lost) {
 			throw new DaemonSupervisorOwnershipLostError(this.record.generation);
 		}
 		const current = readOwnerRecord(this.ownerDirectory);
@@ -346,6 +348,11 @@ async function refreshDaemonSupervisorOwner(
 		}
 		const current = requireOwnerRecord(directory);
 		if (!sameOwnerRecord(current, expectedOwner)) {
+			return undefined;
+		}
+		const scopePath = resolve(directory, "scope.json");
+		const scope = readOwnerScope(directory);
+		if (existsSync(scopePath) && (!scope || !sameOwnerScope(expectedOwner, scope))) {
 			return undefined;
 		}
 		current.updatedAt = new Date().toISOString();
