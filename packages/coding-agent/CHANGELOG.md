@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
+- Added `app.edits.expand` (`ctrl+j`) to toggle edit diffs; diffs are now shown only by this toggle, and `ctrl+o` no longer affects them.
 - Added a working hint that recommends sharing traces with Prime Intellect to help train open-source LLMs.
 - Added back the model cycling shortcut as the configurable `app.model.cycleForward` (`Ctrl+P`) and `app.model.cycleBackward` (`Shift+Ctrl+P`) keybindings.
 - Added the configurable `app.thinking.cycle` (`Shift+Tab`) keybinding to cycle through the available thinking levels, matching the `/effort` selector.
+- Changed edit rendering so the `╰─ <path> +N -M` summary line is always visible and `ctrl+j` toggles the diff inline beneath it, indented to the summary text.
+- Changed the agents view splash hint from "type to start" to "type to search sessions".
 - Fixed fullscreen wheel scrolling in Ghostty while retaining application link clicks; set `terminal.fullscreenMouse` to `false` to use native Cmd-click instead.
 - Changed the agents view to sort idle and inactive sessions by last message time, newest first, while keeping running agents in stable creation order.
 - Fixed `/update --extensions` in the TUI exiting with code 1; the interactive handler now translates legacy extension-update arguments to the `package update` CLI while keeping self-updates unchanged.

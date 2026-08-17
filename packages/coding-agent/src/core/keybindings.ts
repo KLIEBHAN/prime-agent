@@ -24,6 +24,7 @@ export interface AppKeybindings {
 	"app.configuration.previousTab": true;
 	"app.tools.expand": true;
 	"app.messages.expand": true;
+	"app.edits.expand": true;
 	"app.thinking.toggle": true;
 	"app.thinking.cycle": true;
 	"app.subagents.focus": true;
@@ -103,6 +104,7 @@ export const KEYBINDINGS = {
 		description: "Toggle agent message expansion",
 		defaultKeyScope: "editor",
 	},
+	"app.edits.expand": { defaultKeys: "ctrl+j", description: "Toggle edit diffs", defaultKeyScope: "editor" },
 	"app.thinking.toggle": {
 		defaultKeys: "ctrl+t",
 		description: "Toggle thinking blocks",
